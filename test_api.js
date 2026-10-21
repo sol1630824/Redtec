@@ -1,7 +1,7 @@
 require('dotenv').config();
 const http = require('http');
 const app = require('./src/app');
-const { sequelize } = require('./src/models');
+const { sequelize, Equipo, Prestamo, Usuario } = require('./src/models');
 
 async function testSuiteCompleta() {
   console.log('================================================================');
@@ -11,6 +11,8 @@ async function testSuiteCompleta() {
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(3003, resolve));
   const baseUrl = 'http://localhost:3003';
+  let equipoPruebaId;
+  let emailPrueba;
 
   async function request(path, options = {}) {
     const res = await fetch(`${baseUrl}${path}`, {
@@ -80,7 +82,7 @@ async function testSuiteCompleta() {
       method: 'POST',
       body: JSON.stringify({
         nombre: 'Nuevo Alumno',
-        email: `alumno_${Date.now()}@redtec.org`,
+        email: (emailPrueba = `alumno_${Date.now()}@redtec.org`),
         password: 'Password123!',
         rol: 'admin'
       })
@@ -116,7 +118,7 @@ async function testSuiteCompleta() {
     // 7. Criterio 3: Equipos no disponibles (Mantenimiento o Prestado) → 409
     const reqMant = await request('/api/prestamos', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${tokenCarlos}` },
+      headers: { Authorization: `Bearer ${tokenAdmin}` },
       body: JSON.stringify({ equipoId: 6, fechaDevolucionEsperada: fechaFutura }) // Equipo 6: Mantenimiento
     });
     assert(
@@ -145,17 +147,24 @@ async function testSuiteCompleta() {
     );
 
     // 9. Criterio 5: Concurrencia y Bloqueo Pesimista
-    // Equipo 5 ("Micrófono Inalámbrico Shure SM58") está disponible
+    // Usar un equipo temporal evita depender de cambios hechos manualmente en el catálogo.
+    const equipoPrueba = await Equipo.create({
+      nombre: `Equipo temporal de integración ${Date.now()}`,
+      categoria: 'Pruebas',
+      descripcion: 'Equipo temporal creado por la suite de integración.',
+      estado: 'Disponible'
+    });
+    equipoPruebaId = equipoPrueba.id;
     const [p1, p2] = await Promise.all([
       request('/api/prestamos', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokenCarlos}` },
-        body: JSON.stringify({ equipoId: 5, fechaDevolucionEsperada: fechaFutura })
+        body: JSON.stringify({ equipoId: equipoPruebaId, fechaDevolucionEsperada: fechaFutura })
       }),
       request('/api/prestamos', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${tokenAdmin}` },
-        body: JSON.stringify({ equipoId: 5, fechaDevolucionEsperada: fechaFutura })
+        headers: { Authorization: `Bearer ${tokenCarlos}` },
+        body: JSON.stringify({ equipoId: equipoPruebaId, fechaDevolucionEsperada: fechaFutura })
       })
     ]);
     const concurrenciaGanoUno = (p1.status === 201 && p2.status === 409) || (p2.status === 201 && p1.status === 409);
@@ -166,22 +175,25 @@ async function testSuiteCompleta() {
 
     // 10. Devolución de préstamo y rechazo de devolución doble
     const prestamoExitosoId = p1.status === 201 ? p1.body.data?.id : p2.body.data?.id;
+    const tokenTitular = p1.status === 201 ? tokenCarlos : tokenAdmin;
     const dev = await request(`/api/prestamos/${prestamoExitosoId}/devolver`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${tokenCarlos}` }
+      headers: { Authorization: `Bearer ${tokenTitular}` }
     });
     assert(
       dev.status === 200,
-      'Devolución de préstamo por el titular se procesa exitosamente (200 OK)'
+      'Devolución de préstamo por el titular se procesa exitosamente (200 OK)',
+      `HTTP ${dev.status}: ${JSON.stringify(dev.body)}`
     );
 
     const devDoble = await request(`/api/prestamos/${prestamoExitosoId}/devolver`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${tokenCarlos}` }
+      headers: { Authorization: `Bearer ${tokenTitular}` }
     });
     assert(
       devDoble.status === 409,
-      'Devolver un préstamo ya devuelto responde 409 Conflict'
+      'Devolver un préstamo ya devuelto responde 409 Conflict',
+      `HTTP ${devDoble.status}: ${JSON.stringify(devDoble.body)}`
     );
 
     console.log(`\n================================================================`);
@@ -189,15 +201,34 @@ async function testSuiteCompleta() {
     console.log(`================================================================`);
 
     if (fallos > 0) {
-      process.exit(1);
+      process.exitCode = 1;
     }
   } catch (err) {
     console.error('❌ Error en testSuiteCompleta:', err);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
-    server.close();
+    try {
+      if (equipoPruebaId) {
+        await Prestamo.destroy({ where: { equipoId: equipoPruebaId } });
+        await Equipo.destroy({ where: { id: equipoPruebaId } });
+      }
+      if (emailPrueba) {
+        await Usuario.destroy({ where: { email: emailPrueba } });
+      }
+    } catch (cleanupError) {
+      console.error('❌ Error limpiando datos temporales de prueba:', cleanupError);
+      process.exitCode = 1;
+    }
+
+    if (server.listening) {
+      await new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }).catch((closeError) => {
+        console.error('❌ Error cerrando el servidor de pruebas:', closeError);
+        process.exitCode = 1;
+      });
+    }
     await sequelize.close();
-    process.exit(0);
   }
 }
 
