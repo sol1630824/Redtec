@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # RedTec API REST — Sistema de Gestión de Inventario y Préstamos
 
 API REST robusta, segura y escalable desarrollada para **RedTec**, una plataforma comunitaria para el control de inventario y préstamo de equipamiento tecnológico (audiovisuales, herramientas y laptops). Diseñada con enfoque de defensa académica oral, priorizando legibilidad, separación de responsabilidades y cumplimiento estricto de reglas de negocio en la capa de persistencia y servicios.
@@ -238,3 +239,6 @@ Para presentarla, inicia el servidor, importa el JSON desde **Postman → Import
    Garantiza la trazabilidad e integridad histórica del centro comunitario, impidiendo la eliminación accidental de un usuario o equipo que mantenga préstamos registrados.
 5. **¿Por qué renderizado exclusivo con `textContent` en el Frontend?**
    Elimina vectores de ataque de inyección de código (Cross-Site Scripting o XSS), asegurando que cualquier dato proveniente de la API se trate como texto literal en el DOM y nunca como HTML ejecutable.
+=======
+# Redtec
+>>>>>>> origin/main
