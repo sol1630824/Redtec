@@ -222,6 +222,8 @@ Contiene:
 * Casos de prueba para los 7 criterios de aceptación.
 * Casos de prueba para token ausente/inválido (401) y fallos de validación (400).
 
+Para presentarla, inicia el servidor, importa el JSON desde **Postman → Import**, cambia `baseUrl` si hace falta y ejecuta primero las solicitudes de login de la carpeta **1. Autenticación**. La colección guarda los tokens para las solicitudes siguientes. Después muestra el listado de equipos y las solicitudes de préstamo exitosas y rechazadas en **2. Equipos** y **3. Préstamos y Devoluciones**. No compartas tokens ni contraseñas durante la exposición.
+
 ---
 
 ## 9. Decisiones Técnicas Clave para la Sustentación Oral
